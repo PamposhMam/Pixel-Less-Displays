@@ -1,0 +1,24 @@
+Read Me: IQM tests
+
+Order to run files in:
+
+
+1)convert all files into .bmps (jpg_maker). 
+	just need to change the file extension
+2) create initial bitmaps (create_init_bmps). Do. NOT. Forget. To. Change. The. URL.
+	This file create bitmap versions of all the image files you have and does the quadrant preparation thing. Tl;dr it creates the images that you are then going to be putting into hologram code
+2) Hologramification. (iterator)
+	this code loops through all of the folders in your repository of folders to create versions of the image as holograms using different algorithms
+
+
+----------
+*After the quiz has been completed, to get the image properties run: Analysis_Stuff_in_the_Image_FULLWORKINGVERSION
+*For checking reference images, use: Comparison
+
+
+----------
+Excel Sheets:
+*Solo_IQMFeatures: image features of every individual image. Needs to be copied in from the output of Analysis_Stuff_in_the_Image_FULLWORKINGVERSION
+
+*Comparison_Metrics: checks the images against standard IQM metrics (MS_SSIM, PSNR-HVS, etc.). Only applicable for quiz questions where there was a reference image for users to compare to.
+
