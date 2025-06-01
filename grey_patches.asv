@@ -1,0 +1,143 @@
+% RegionHoloFromGreyscale_4x4.m
+clear; clc;
+
+% --- Load grayscale image ---
+filename = 'Biccy.jpg';
+[~, name, ~] = fileparts(filename);
+img = im2double(imread(filename));
+if size(img, 3) > 1
+    img = rgb2gray(img);
+end
+[M, N] = size(img);
+total_pixels = M * N;
+
+% --- Create output folder ---
+outdir = 'RegionHologramOutputs';
+if ~exist(outdir, 'dir')
+    mkdir(outdir);
+end
+
+% --- Frequency grid (same size as original image) ---
+[u, v] = meshgrid(linspace(0, 1, N), linspace(0, 1, M));
+U = u;
+V = v;
+
+%%
+% --- Quantize intensities (e.g. into 32 levels) to group similar regions ---
+nLevels = 50;
+
+%Option 1: Linear
+% quantized = round(img * (nLevels - 2));  % values 0 to 31
+
+
+% Option 2: Exponential Quantisation
+% bin_edges = exp(1:nLevels);  % [exp(1), exp(2), ..., exp(nLevels)]
+% 
+% % Normalize image to fit between exp(1) and exp(nLevels)
+% img_rescaled = img * (bin_edges(end) - bin_edges(1)) + bin_edges(1);
+% 
+% % Digitize: assign each pixel to a bin based on thresholds
+% quantized = zeros(size(img_rescaled));
+% for k = 1:(nLevels - 1)
+%     quantized(img_rescaled >= bin_edges(k) & img_rescaled < bin_edges(k+1)) = k - 1;
+% end
+% 
+% % Assign the last bin explicitly
+% quantized(img_rescaled >= bin_edges(end)) = nLevels - 1;
+
+% Option 3: Square root Stretch (gamma < 1 brightens)
+% quantized = round((sqrt(img)) * (nLevels - 2));
+
+% Option 4: Logarithmic compression
+% epsilon = 1e-6;  % avoid log(0)
+% quantized = round((log(img + epsilon) / log(1 + epsilon + 1)) * (nLevels - 2));
+epsilon = 1e-6;
+img_log = log(1 + img * 19) / log(100);  % maps [0,1] to [0,1]
+quantized = floor(img_log * nLevels);
+quantized = min(quantized, nLevels - 1);
+
+
+% Option 5: Sine modulation
+%quantized = round( (sin(pi * img / 2)).^2 * (nLevels - 2) );
+
+% Option 6: Tangent modulation (bounded domain)
+% normalized = img * 0.49;  % scale to avoid tan(pi/2)
+% quantized = round( tan(pi * normalized) / tan(pi * 0.49) * (nLevels - 2) );
+% quantized = min(max(quantized, 0), nLevels - 2);  % clip
+
+% Option 7: Piecewise banding (manual thresholds)
+% quantized = zeros(size(img));
+% quantized(img < 0.2) = 0;
+% quantized(img >= 0.2 & img < 0.5) = 1;
+% quantized(img >= 0.5 & img < 0.8) = 2;
+% quantized(img >= 0.8) = 3;
+
+
+
+
+
+
+
+%%
+% --- Label connected components by intensity ---
+H_partial = zeros(M, N);
+count = 0;
+
+for i = 0:(nLevels - 1)
+    mask = quantized == i;
+    if ~any(mask(:))
+        continue;
+    end
+
+    CC = bwconncomp(mask, 8);
+    for regionIdx = 1:CC.NumObjects
+        pixelList = CC.PixelIdxList{regionIdx};
+        [rows, cols] = ind2sub([M, N], pixelList);
+
+        if numel(pixelList) < 3
+            continue;
+        end
+
+        coords = [min(cols), min(rows); max(cols), max(rows)];
+        mean_intensity = mean(img(pixelList));
+        scale = 1 + numel(pixelList) / total_pixels;
+        amp = mean_intensity * scale;
+
+        H = RECT_colour(amp, coords, U, V);
+        H_partial = H_partial + H;
+
+        count = count + 1;
+        if mod(count, 1000) == 0
+            fprintf('Processed %d regions...\n', count);
+        end
+    end
+end
+
+% --- Embed into 4x4-style full canvas (2× height and width) ---
+H_total = zeros(M * 2, N * 2);
+
+% Top-left: original hologram
+H_total(1:M, 1:N) = H_partial;
+
+% Bottom-right: 180° rotated (conjugate symmetric real modulation)
+H_total(end-M+1:end, end-N+1:end) = rot90(H_partial, 2);
+
+% --- Compute replay ---
+replay = ifft2(H_total);
+replay_abs = mat2gray(abs(replay));
+
+% --- Display ---
+figure; imshow(replay_abs); title('Replay Field');
+
+% --- Save outputs ---
+replay_file = fullfile(outdir, sprintf('%s_SHIFT_256lv_20times_region_replay.bmp', name));
+holo_file   = fullfile(outdir, sprintf('%s_SHIFT_256region_hologram.bmp', name));
+imwrite(replay_abs, replay_file);
+imwrite(mat2gray(abs(H_total)), holo_file);
+
+% --- Generate binary phase version (0 or π) ---
+binary_phase = pi * (mod(angle(H_total), pi) > (pi / 2));
+binary_holo_file = fullfile(outdir, sprintf('%s_binary_phase_hologram.bmp', name));
+imwrite(mat2gray(binary_phase), binary_holo_file);
+
+fprintf('Saved replay, grayscale hologram, and binary phase hologram to: %s\n', outdir);

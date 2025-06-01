@@ -1,0 +1,132 @@
+%% Define Initial Params
+clear all 
+
+Holo=zeros(1080,1280);
+[numrows, numcols]= size(Holo);
+omega = pi/4 ; % define the angle of the arc
+x0 =  100 * cos(0-omega); 
+y0 =  100 * sin(0-omega);
+x1 =  100 * cos(0);
+y1 =  100 * sin(0);
+x11= 50 * cos(0);
+y11= 50 * sin(0);
+
+
+name= 'play';
+
+% Step 2: Create a Folder with the Same Name
+outputFolder = fullfile(pwd, name); % Create folder path
+if ~exist(outputFolder, 'dir')
+    mkdir(outputFolder); % Make directory if it doesn't exist
+end
+
+
+% when i do the actual code, omega will be calculated on its own...
+
+%% Calculation of parameters {Me rehashing Jake}
+% t values — evenly spaced points for Simpson’s rule
+n = 100; % Number of subintervals
+t = linspace(0, 1, 2 * n + 1); % 2n+1 points for Simpson’s Rule
+
+% Numeric alpha and beta
+alpha = @(t) (sin((1 - t) * omega) * x0 + sin(t * omega) * x1) / sin(omega);
+beta = @(t) (sin((1 - t) * omega) * y0 + sin(t * omega) * y1) / sin(omega);
+
+%Just testing changing the radius on the second point
+alpha1 = @(t) (sin((1 - t) * omega) * x0 + sin(t * omega) * x11) / sin(omega);
+beta1 = @(t) (sin((1 - t) * omega) * y0 + sin(t * omega) * y11) / sin(omega);
+
+
+
+% U and V axes
+U = linspace(-1, 1, size(Holo, 2));
+V = linspace(-1, 1, size(Holo, 1));
+[U, V] = meshgrid(U, V);
+
+% Holo Derivative Function — numeric and evaluated at each t
+Holo_Deriv_Func = @(t) exp(2 * pi * 1j * (U .* alpha(t) + V .* beta(t)));
+Holo_Deriv_Func1 = @(t) exp(2 * pi * 1j * (U .* alpha1(t) + V .* beta1(t)));
+
+% Use Simpson's Rule to integrate over numeric t
+Holo_Func = Simpsons_Rule(Holo_Deriv_Func, 0, 1, n);
+Holo_Func1 = Simpsons_Rule(Holo_Deriv_Func1, 0, 1, n);
+
+%(Changing the deriv function so i can use matlab inbuilt functions)
+Holo_Deriv_Spare= @(x) exp(2 * pi * 1j * (U .* alpha(x) + V .* beta(x)));
+
+% %Include a coordinate shift to wherever you want to start from
+
+a= numcols/2; %coordinate along the x-axis
+b= numrows/2; %coordinate along the y-axis
+
+%%% save 
+
+Holo = Holo + Holo_Func + Holo_Func1; %*exp(-2 * pi * 1j * (U .* a + V .* b));
+
+
+% imwrite(mat2gray(abs(Holo)), 'Arc_Hologram.bmp') % If you want a BMP image
+% 
+% 
+% %Holo=abs(Holo);
+% 
+% Replay = fftshift(fft2(Holo));
+% 
+% % Normalize Replay for better contrast before saving
+% Replay = abs(Replay);
+% Replay = Replay / max(Replay(:)); % Scale between [0,1]
+% 
+% imwrite(Replay, '2_Replay_Arc.bmp');
+
+%%
+% Step 1: Generate a Phase Mask for "JONES APERTURE"
+textSize = 50; % Adjust for visibility
+position = [round(numcols * 0.3), round(numrows * 0.5)]; % Center it
+
+% Create a blank mask to overlay text
+textMask = ones(numrows, numcols); 
+textMask = insertText(textMask, position, 'JONES APERTURE', 'FontSize', textSize, 'BoxColor', 'black', 'TextColor', 'white');
+textMask = im2bw(rgb2gray(textMask)); % Convert to binary mask
+% 
+% % Convert binary mask into a phase modulation (0 or pi)
+% phaseModulation = 100*pi*cos(sqrt(U.*U+V.*V)); %It WAS previously 1j*ip
+
+% % Step 2: Apply the Phase Modulation to the Hologram
+% Holo = Holo .* exp(1j * phaseModulation); 
+
+% Step 3: Define the Jones Matrix
+tau = pi;
+thetajones = pi/2;
+J = [exp(-1j*tau/2)*(cos(thetajones))^2 + exp(1j*tau/2)*(sin(thetajones))^2, -1j*sin(tau/2)*sin(2*thetajones); ...
+    -1j*sin(tau/2)*sin(2*thetajones), exp(1j*tau/2)*(cos(thetajones))^2 + exp(-1j*tau/2)*(sin(thetajones))^2];
+
+% % Step 1: Apply the Jones Matrix Directly to Holo
+Ex_mod = J(1,1) * Holo + J(1,2) * Holo;
+Ey_mod = J(2,1) * Holo + J(2,2) * Holo;
+
+% Step 2: Compute the Final Hologram (Before FFT)
+Holo_mod = Ex_mod + Ey_mod;
+
+% % Step 3: Convert to Binary Phase (0 or pi)
+Holo_mod = mod(angle(Holo_mod), pi) > (pi/2);  % Threshold to 0 or 1
+Holo_mod = Holo_mod * pi;  % Convert binary 0,1 → 0,π
+
+% Step 4: Compute the Replay Field
+Replay = fftshift(fft2(Holo)); % FFT of binary phase modulated hologram
+
+% Step 5: Display Results
+figure; imshow(mat2gray(abs(Holo_mod))); title('Binary Phase Hologram (0 or π)');
+figure; imshow(mat2gray(abs(Replay))); title('Reconstructed Image (FFT) from Binary Phase');
+
+% Step 6: Save the Binary Hologram
+imwrite(mat2gray(abs(Holo_mod)), fullfile(outputFolder, "Binary_Phase_Hologram.bmp"));
+imwrite(mat2gray(abs(Replay)), fullfile(outputFolder, "Binary_Replay.bmp"));
+
+%Step 7: Also save a correct-sized hologram to the folder
+% Holo_mod_sized= imresize(Holo_mod, [1024, 1280], 'bilinear');
+% Holo_mod_
+
+Holo_mod_sized=fliplr(Holo_mod);
+imwrite(mat2gray(abs(Holo_mod_sized)), fullfile(outputFolder, "Holo_Sized.bmp"));
+imwrite(mat2gray(abs(Holo_mod_sized)), fullfile(outputFolder, "Holo_Sized.png"));
+
+
