@@ -1,0 +1,9 @@
+Scripts:
+*LERP= CLERP, technically. 
+*Coordinate cases== coordinates that can be plugged into Vector_Graphics_Line_Code
+*Vector_Graphics_Line_Code: the hologram formula of a line, proposed by Jake Knight
+*SLERP_Correction_Slerp_Function_Arc: create arcs using this
+
+
+Functions:
+*Simpson's Rule: numerical integrator
